@@ -84,7 +84,7 @@
         const rows = json.table.rows;
 
         rows.forEach((row, i) => {
-          const date = row.c[1]?.v || "";     // วันที่ตรวจ (คอลัมน์ 2)
+          const date = row.c[1]?.f || row.c[1]?.v || "";// วันที่ตรวจ (คอลัมน์ 2)
           const inspector = row.c[2]?.v || "";// ชื่อผู้ตรวจ (คอลัมน์ 3)
           const number = row.c[3]?.v || "";   // หมายเลขถัง (คอลัมน์ 4)
           const xyStr = row.c[13]?.v || "";   // พิกัด XY (คอลัมน์ 14)
@@ -122,4 +122,5 @@
   </script>
 </body>
 </html>
+
 
