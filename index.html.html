@@ -4,23 +4,67 @@
   <meta charset="UTF-8">
   <title>แผนผังถังดับเพลิง</title>
   <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+    }
+
+    h2 {
+      text-align: center;
+    }
+
     .map-container {
       position: relative;
-      width: 876px;
-      height: 598px;
-      background-image: url('Lay out AMB2.jpg'); /* เปลี่ยนเป็นชื่อไฟล์ภาพจริงของคุณ */
-      background-size: cover;
+      width: 100%;
+      max-width: 873px;
+      aspect-ratio: 873 / 600;
+      background-image: url('https://github.com/safetyhealthenvgs-code/Firemap-/blob/main/Lay%20out%20Office%20fist%20Floor.jpg');
+      background-size: contain;
+      background-position: top left;
+      background-repeat: no-repeat;
       border: 1px solid #ccc;
+      margin: auto;
+    }
+
+    .map-container::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image:
+        linear-gradient(to right, rgba(0,0,0,0.05) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(0,0,0,0.05) 1px, transparent 1px);
+      background-size: 10% 10%;
+      pointer-events: none;
     }
 
     .marker {
       position: absolute;
-      width: 50px;
-      height: 50px;
+      width: 12px;
+      height: 12px;
       background-color: red;
+      border: 2px solid white;
+      box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
       border-radius: 50%;
       transform: translate(-50%, -50%);
       cursor: pointer;
+    }
+
+    .marker:hover::after {
+      content: attr(data-info);
+      position: absolute;
+      top: -45px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      white-space: nowrap;
+      z-index: 10;
     }
   </style>
 </head>
@@ -30,58 +74,51 @@
 
   <script>
     const SHEET_ID = "18YbWGcRIHhxv40v_7NTXQUNL3mV9jnNQrjfcUOvQEQs";
-    const SHEET_NAME = "Zone AMB2";
+    const SHEET_NAME = "Zone Office First Floor";
     const jsonUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}`;
 
     fetch(jsonUrl)
       .then(res => res.text())
       .then(text => {
-        // Google ใส่ wrapper ไว้ ต้องตัดออก
         const json = JSON.parse(text.substr(47).slice(0, -2));
         const rows = json.table.rows;
 
-        const coords = [];
-
         rows.forEach((row, i) => {
-          const name = row.c[2]?.v || "";     // หมายเลขถัง (คอลัมน์ C)
-          const xyStr = row.c[11]?.v || "";   // พิกัด (คอลัมน์ L)
+          const date = row.c[1]?.v || "";     // วันที่ตรวจ (คอลัมน์ 2)
+          const inspector = row.c[2]?.v || "";// ชื่อผู้ตรวจ (คอลัมน์ 3)
+          const number = row.c[3]?.v || "";   // หมายเลขถัง (คอลัมน์ 4)
+          const xyStr = row.c[13]?.v || "";   // พิกัด XY (คอลัมน์ 14)
 
-          if (!xyStr.includes(",")) return;
+          if (!xyStr.includes(",")) {
+            console.warn(`แถว ${i} ไม่มีพิกัดที่ถูกต้อง: ${xyStr}`);
+            return;
+          }
 
           const [xStr, yStr] = xyStr.split(",");
           const x = parseFloat(xStr.trim());
           const y = parseFloat(yStr.trim());
-          if (isNaN(x) || isNaN(y)) return;
 
-          coords.push({ x, y, name });
-        });
+          if (isNaN(x) || isNaN(y)) {
+            console.warn(`แถว ${i} มีพิกัดที่ไม่ใช่ตัวเลข: x=${xStr}, y=${yStr}`);
+            return;
+          }
 
-        if (coords.length === 0) {
-          console.warn("ไม่มีข้อมูลพิกัดที่ถูกต้อง");
-          return;
-        }
+          // สร้างข้อความ tooltip
+          const info = `วันที่ตรวจ: ${date}\nหมายเลขถัง: ${number}\nผู้ตรวจ: ${inspector}`;
 
-        // คำนวณขอบเขตเพื่อทำสัดส่วน
-        const minX = Math.min(...coords.map(c => c.x));
-        const maxX = Math.max(...coords.map(c => c.x));
-        const minY = Math.min(...coords.map(c => c.y));
-        const maxY = Math.max(...coords.map(c => c.y));
-
-        const map = document.getElementById("map");
-
-        coords.forEach(({ x, y, name }) => {
-          const leftPercent = ((x - minX) / (maxX - minX)) * 100;
-          const topPercent = ((y - minY) / (maxY - minY)) * 100;
-
+          // แสดง marker จากพิกัด 0–100
           const marker = document.createElement("div");
           marker.className = "marker";
-          marker.style.left = leftPercent + "%";
-          marker.style.top = topPercent + "%";
-          marker.title = name;
-          map.appendChild(marker);
+          marker.style.left = `${x}%`;
+          marker.style.top = `${y}%`;
+          marker.setAttribute("data-info", info);
+
+          document.getElementById("map").appendChild(marker);
         });
       })
-      .catch(err => console.error("โหลดข้อมูลไม่สำเร็จ:", err));
+      .catch(err => {
+        console.error("โหลดข้อมูลไม่สำเร็จ:", err);
+      });
   </script>
 </body>
 </html>
