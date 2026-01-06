@@ -60,7 +60,7 @@ h2{text-align:center}
 const SHEET_ID="18YbWGcRIHhxv40v_7NTXQUNL3mV9jnNQrjfcUOvQEQs";
 const SHEET_NAME="Zone Office First Floor";
 
-const DATE_COL=1;      // B วันที่ตรวจ
+const DATE_COL=1;      // B วันที่ตรวจ (AppSheet Date)
 const INSPECTOR_COL=2; // C
 const NUMBER_COL=3;    // D
 const XY_COL=13;       // N (x,y)
@@ -79,22 +79,36 @@ fetch(url)
 })
 .catch(e=>console.error("โหลดข้อมูลล้มเหลว",e));
 
-/* ---------- PARSE DATE FROM cell.f OR cell.v ---------- */
-function parseThaiDate(cell){
+/* ---------- PARSE DATE (รองรับ AppSheet) ---------- */
+function parseDate(cell){
   if(!cell) return null;
 
-  const raw = cell.f || cell.v;
-  if(!raw || typeof raw !== "string") return null;
+  /* 1️⃣ Date(2025,8,27) */
+  if(typeof cell.v === "string"){
+    const m = cell.v.match(/Date\((\d+),(\d+),(\d+)\)/);
+    if(m){
+      return {
+        day: parseInt(m[3],10),
+        month: parseInt(m[2],10) + 1, // 0–11 → 1–12
+        year: parseInt(m[1],10) + 543 // ค.ศ. → พ.ศ.
+      };
+    }
+  }
 
-  // รองรับ 27/9/2568
-  const p = raw.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if(!p) return null;
+  /* 2️⃣ 27/9/2568 (จาก cell.f) */
+  const raw = cell.f;
+  if(typeof raw === "string"){
+    const p = raw.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if(p){
+      return {
+        day: parseInt(p[1],10),
+        month: parseInt(p[2],10),
+        year: parseInt(p[3],10)
+      };
+    }
+  }
 
-  return {
-    day: parseInt(p[1],10),
-    month: parseInt(p[2],10), // 1–12
-    year: parseInt(p[3],10)   // พ.ศ.
-  };
+  return null;
 }
 
 /* ---------- BUILD DROPDOWN (9/2568) ---------- */
@@ -102,7 +116,7 @@ function buildDropdown(){
   const set=new Set();
 
   rows.forEach(r=>{
-    const d=parseThaiDate(r.c[DATE_COL]);
+    const d=parseDate(r.c[DATE_COL]);
     if(!d) return;
     set.add(`${d.month}/${d.year}`);
   });
@@ -112,7 +126,7 @@ function buildDropdown(){
 
   if(set.size===0){
     sel.innerHTML="<option>ไม่พบข้อมูลเดือน</option>";
-    console.warn("❌ ไม่พบวันที่ที่ parse ได้จาก Google Sheet");
+    console.warn("❌ ไม่สามารถ parse วันที่จาก AppSheet ได้");
     return;
   }
 
@@ -139,7 +153,7 @@ function render(selected){
   mapEl.innerHTML="";
 
   rows.forEach(r=>{
-    const d=parseThaiDate(r.c[DATE_COL]);
+    const d=parseDate(r.c[DATE_COL]);
     if(!d) return;
 
     if(`${d.month}/${d.year}`!==selected) return;
@@ -167,4 +181,5 @@ function render(selected){
 
 </body>
 </html>
+
 
