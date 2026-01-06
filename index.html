@@ -5,34 +5,43 @@
 <title>แผนผังถังดับเพลิง</title>
 
 <style>
-body{font-family:sans-serif;padding:20px}
-h2{text-align:center}
-.filter{text-align:center;margin-bottom:10px}
-
+body{
+  font-family:sans-serif;
+  padding:20px
+}
+h2{
+  text-align:center
+}
+.filter{
+  text-align:center;
+  margin-bottom:10px
+}
 .map-container{
   position:relative;
   width:100%;
   max-width:873px;
   aspect-ratio:873/600;
-  background:url('https://github.com/safetyhealthenvgs-code/Firemap-Office-First-Floor/blob/main/Lay%20out%20Office%20fist%20Floor.jpg?raw=true') no-repeat top left;
+  background:url('https://github.com/safetyhealthenvgs-code/Firemap-Office-First-Floor/blob/main/Lay%20out%20Office%20fist%20Floor.jpg?raw=true')
+    no-repeat top left;
   background-size:contain;
   border:1px solid #ccc;
-  margin:auto;
+  margin:auto
 }
-
 .marker{
   position:absolute;
-  width:12px;height:12px;
+  width:12px;
+  height:12px;
   background:red;
   border:2px solid #fff;
   border-radius:50%;
   transform:translate(-50%,-50%);
+  cursor:pointer
 }
-
 .marker:hover::after{
   content:attr(data-info);
   position:absolute;
-  top:-60px;left:50%;
+  top:-60px;
+  left:50%;
   transform:translateX(-50%);
   background:#000c;
   color:#fff;
@@ -40,6 +49,7 @@ h2{text-align:center}
   font-size:12px;
   border-radius:4px;
   white-space:pre;
+  z-index:10
 }
 </style>
 </head>
@@ -57,53 +67,54 @@ h2{text-align:center}
 
 <script>
 /* ================= CONFIG ================= */
-const SHEET_ID="18YbWGcRIHhxv40v_7NTXQUNL3mV9jnNQrjfcUOvQEQs";
-const SHEET_NAME="Zone Office First Floor";
+const SHEET_ID = "18YbWGcRIHhxv40v_7NTXQUNL3mV9jnNQrjfcUOvQEQs";
+const SHEET_NAME = "Zone Office First Floor";
 
-const DATE_COL=1;      // B วันที่ตรวจ (AppSheet Date)
-const INSPECTOR_COL=2; // C
-const NUMBER_COL=3;    // D
-const XY_COL=13;       // N (x,y)
+const DATE_COL = 1;       // B วันที่ตรวจ (AppSheet Date)
+const INSPECTOR_COL = 2;  // C
+const NUMBER_COL = 3;     // D
+const XY_COL = 13;        // N (x,y)
 /* ========================================= */
 
-const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}`;
-let rows=[];
+const url =
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}`;
+
+let rows = [];
 
 /* ---------- LOAD DATA ---------- */
 fetch(url)
-.then(r=>r.text())
-.then(t=>{
-  const json=JSON.parse(t.substring(47).slice(0,-2));
-  rows=json.table.rows;
+.then(r => r.text())
+.then(t => {
+  const json = JSON.parse(t.substring(47).slice(0,-2));
+  rows = json.table.rows;
   buildDropdown();
 })
-.catch(e=>console.error("โหลดข้อมูลล้มเหลว",e));
+.catch(e => console.error("โหลดข้อมูลไม่สำเร็จ", e));
 
 /* ---------- PARSE DATE (รองรับ AppSheet) ---------- */
 function parseDate(cell){
   if(!cell) return null;
 
-  /* 1️⃣ Date(2025,8,27) */
+  /* 1) Date(2025,8,27) */
   if(typeof cell.v === "string"){
     const m = cell.v.match(/Date\((\d+),(\d+),(\d+)\)/);
     if(m){
       return {
         day: parseInt(m[3],10),
         month: parseInt(m[2],10) + 1, // 0–11 → 1–12
-        year: parseInt(m[1],10) + 543 // ค.ศ. → พ.ศ.
+        year: parseInt(m[1],10)       // ค.ศ. เท่านั้น
       };
     }
   }
 
-  /* 2️⃣ 27/9/2568 (จาก cell.f) */
-  const raw = cell.f;
-  if(typeof raw === "string"){
-    const p = raw.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  /* 2) 27/9/2568 */
+  if(typeof cell.f === "string"){
+    const p = cell.f.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if(p){
       return {
         day: parseInt(p[1],10),
         month: parseInt(p[2],10),
-        year: parseInt(p[3],10)
+        year: parseInt(p[3],10) - 543 // พ.ศ. → ค.ศ.
       };
     }
   }
@@ -113,67 +124,67 @@ function parseDate(cell){
 
 /* ---------- BUILD DROPDOWN (9/2568) ---------- */
 function buildDropdown(){
-  const set=new Set();
+  const set = new Set();
 
   rows.forEach(r=>{
-    const d=parseDate(r.c[DATE_COL]);
+    const d = parseDate(r.c[DATE_COL]);
     if(!d) return;
-    set.add(`${d.month}/${d.year}`);
+    set.add(`${d.month}/${d.year}`); // internal = ค.ศ.
   });
 
-  const sel=document.getElementById("monthFilter");
-  sel.innerHTML="";
+  const sel = document.getElementById("monthFilter");
+  sel.innerHTML = "";
 
-  if(set.size===0){
-    sel.innerHTML="<option>ไม่พบข้อมูลเดือน</option>";
-    console.warn("❌ ไม่สามารถ parse วันที่จาก AppSheet ได้");
+  if(set.size === 0){
+    sel.innerHTML = "<option>ไม่พบข้อมูลเดือน</option>";
     return;
   }
 
   [...set]
     .sort((a,b)=>{
-      const [ma,ya]=a.split("/").map(Number);
-      const [mb,yb]=b.split("/").map(Number);
+      const [ma,ya] = a.split("/").map(Number);
+      const [mb,yb] = b.split("/").map(Number);
       return yb-ya || mb-ma;
     })
     .forEach(v=>{
-      const o=document.createElement("option");
-      o.value=v;
-      o.textContent=v;
-      sel.appendChild(o);
+      const [m,y] = v.split("/").map(Number);
+      const opt = document.createElement("option");
+      opt.value = v;
+      opt.textContent = `${m}/${y+543}`; // แสดงเป็น พ.ศ.
+      sel.appendChild(opt);
     });
 
   render(sel.value);
-  sel.onchange=()=>render(sel.value);
+  sel.onchange = () => render(sel.value);
 }
 
 /* ---------- RENDER MAP ---------- */
 function render(selected){
-  const mapEl=document.getElementById("map");
-  mapEl.innerHTML="";
+  const mapEl = document.getElementById("map");
+  mapEl.innerHTML = "";
 
   rows.forEach(r=>{
-    const d=parseDate(r.c[DATE_COL]);
+    const d = parseDate(r.c[DATE_COL]);
     if(!d) return;
 
-    if(`${d.month}/${d.year}`!==selected) return;
+    if(`${d.month}/${d.year}` !== selected) return;
 
-    const xy=r.c[XY_COL]?.v;
-    if(!xy||!xy.includes(",")) return;
+    const xy = r.c[XY_COL]?.v;
+    if(!xy || !xy.includes(",")) return;
 
-    const [x,y]=xy.split(",").map(Number);
-    if(isNaN(x)||isNaN(y)) return;
+    const [x,y] = xy.split(",").map(Number);
+    if(isNaN(x) || isNaN(y)) return;
 
-    const info=
-`วันที่ตรวจ: ${d.day}/${d.month}/${d.year}
-หมายเลขถัง: ${r.c[NUMBER_COL]?.v||""}
-ผู้ตรวจ: ${r.c[INSPECTOR_COL]?.v||""}`;
+    const info =
+`วันที่ตรวจ: ${d.day}/${d.month}/${d.year+543}
+หมายเลขถัง: ${r.c[NUMBER_COL]?.v || ""}
+ผู้ตรวจ: ${r.c[INSPECTOR_COL]?.v || ""}`;
 
-    const m=document.createElement("div");
-    m.className="marker";
-    m.style.left=`${x}%`;
-    m.style.top=`${y}%`;
-    m.setAttribute("data-info",info);
+    const m = document.createElement("div");
+    m.className = "marker";
+    m.style.left = `${x}%`;
+    m.style.top = `${y}%`;
+    m.setAttribute("data-info", info);
     mapEl.appendChild(m);
   });
 }
@@ -181,5 +192,3 @@ function render(selected){
 
 </body>
 </html>
-
-
