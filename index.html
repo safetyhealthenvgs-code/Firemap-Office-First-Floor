@@ -90,11 +90,11 @@
 const SHEET_ID = "18YbWGcRIHhxv40v_7NTXQUNL3mV9jnNQrjfcUOvQEQs";
 const SHEET_NAME = "Zone Office First Floor";
 
-/* 🔴 สำคัญ: ปรับ index ให้ตรงกับ Google Sheet ของคุณ */
-const DATE_COL = 1;        // วันที่ตรวจ
-const INSPECTOR_COL = 2;   // ผู้ตรวจ
-const NUMBER_COL = 3;      // หมายเลขถัง
-const XY_COL = 13;         // พิกัด X,Y
+/* จาก Google Sheet ที่คุณส่งมา */
+const DATE_COL = 1;        // B: วันที่ตรวจถังดับเพลิง
+const INSPECTOR_COL = 2;   // C: ชื่อผู้ตรวจ
+const NUMBER_COL = 3;      // D: หมายเลขถัง
+const XY_COL = 13;         // N: ตำแหน่งถัง (X,Y)
 
 const TH_MONTHS = [
   "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.",
@@ -108,7 +108,7 @@ const jsonUrl =
 
 let allRows = [];
 
-/* ---------- โหลดข้อมูล ---------- */
+/* ---------- LOAD DATA ---------- */
 fetch(jsonUrl)
   .then(res => res.text())
   .then(text => {
@@ -118,30 +118,34 @@ fetch(jsonUrl)
   })
   .catch(err => console.error("โหลดข้อมูลไม่สำเร็จ", err));
 
-/* ---------- ฟังก์ชัน parse วันที่ (ถึกสุด) ---------- */
+/* ---------- PARSE DATE (รองรับ พ.ศ.) ---------- */
 function parseSheetDate(cell) {
   if (!cell || !cell.v) return null;
 
-  if (cell.v instanceof Date) {
-    return cell.v;
-  }
-
+  // กรณีเป็น string เช่น 27/9/2568
   if (typeof cell.v === "string") {
     const parts = cell.v.split("/");
     if (parts.length === 3) {
-      let d = parseInt(parts[0], 10);
-      let m = parseInt(parts[1], 10) - 1;
-      let y = parseInt(parts[2], 10);
-      if (y > 2400) y -= 543; // พ.ศ. → ค.ศ.
-      const date = new Date(y, m, d);
-      if (!isNaN(date)) return date;
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      let year = parseInt(parts[2], 10);
+
+      if (year > 2400) year -= 543; // พ.ศ. → ค.ศ.
+
+      const d = new Date(year, month, day);
+      if (!isNaN(d)) return d;
     }
+  }
+
+  // กรณี Google ส่ง Date object มา
+  if (cell.v instanceof Date) {
+    return cell.v;
   }
 
   return null;
 }
 
-/* ---------- สร้าง Dropdown เดือน ---------- */
+/* ---------- BUILD DROPDOWN ---------- */
 function buildMonthSelector() {
   const monthMap = new Map();
 
@@ -151,6 +155,7 @@ function buildMonthSelector() {
 
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     const label = `${TH_MONTHS[d.getMonth()]} ${d.getFullYear() + 543}`;
+
     monthMap.set(key, label);
   });
 
@@ -178,7 +183,7 @@ function buildMonthSelector() {
   select.addEventListener("change", () => renderMap(select.value));
 }
 
-/* ---------- แสดง Marker ---------- */
+/* ---------- RENDER MAP ---------- */
 function renderMap(selectedMonth) {
   const map = document.getElementById("map");
   map.innerHTML = "";
@@ -196,7 +201,7 @@ function renderMap(selectedMonth) {
     const [xStr, yStr] = xyStr.split(",");
     const x = parseFloat(xStr);
     const y = parseFloat(yStr);
-    if (isNaN(x) || isNaN(y) || x < 0 || x > 100 || y < 0 || y > 100) return;
+    if (isNaN(x) || isNaN(y)) return;
 
     const info = `
       วันที่ตรวจ: ${d.toLocaleDateString("th-TH")}<br>
