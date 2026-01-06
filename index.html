@@ -40,7 +40,7 @@ h2{
 .marker:hover::after{
   content:attr(data-info);
   position:absolute;
-  top:-60px;
+  top:-65px;
   left:50%;
   transform:translateX(-50%);
   background:#000c;
@@ -67,19 +67,56 @@ h2{
 
 <script>
 /* ================= CONFIG ================= */
-const SHEET_ID = "18YbWGcRIHhxv40v_7NTXQUNL3mV9jnNQrjfcUOvQEQs";
+const SHEET_ID   = "18YbWGcRIHhxv40v_7NTXQUNL3mV9jnNQrjfcUOvQEQs";
 const SHEET_NAME = "Zone Office First Floor";
 
-const DATE_COL = 1;       // B วันที่ตรวจ (AppSheet Date)
-const INSPECTOR_COL = 2;  // C
-const NUMBER_COL = 3;     // D
-const XY_COL = 13;        // N (x,y)
+const DATE_COL      = 1;  // วันที่ตรวจ
+const INSPECTOR_COL = 2;  // ผู้ตรวจ
+const NUMBER_COL    = 3;  // หมายเลขถัง
+const XY_COL        = 13; // x,y
 /* ========================================= */
 
 const url =
   `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}`;
 
 let rows = [];
+
+/* ---------- NORMALIZE YEAR ---------- */
+function normalizeYear(y){
+  y = parseInt(y,10);
+  return y >= 2400 ? y - 543 : y; // >=2400 = พ.ศ.
+}
+
+/* ---------- PARSE DATE (SAFE ทุกกรณี) ---------- */
+function parseDate(cell){
+  if(!cell) return null;
+
+  /* gviz: Date(2025,8,27) */
+  if(typeof cell.v === "string"){
+    const m = cell.v.match(/Date\((\d+),(\d+),(\d+)\)/);
+    if(m){
+      return {
+        day: parseInt(m[3],10),
+        month: parseInt(m[2],10) + 1,
+        year: parseInt(m[1],10) // ค.ศ.
+      };
+    }
+  }
+
+  /* แสดงผล: 27/9/2568 หรือ 27/9/2025 */
+  if(typeof cell.f === "string"){
+    const p = cell.f.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if(p){
+      return {
+        day: parseInt(p[1],10),
+        month: parseInt(p[2],10),
+        year: normalizeYear(p[3])
+      };
+    }
+  }
+
+  return null;
+}
 
 /* ---------- LOAD DATA ---------- */
 fetch(url)
@@ -91,38 +128,7 @@ fetch(url)
 })
 .catch(e => console.error("โหลดข้อมูลไม่สำเร็จ", e));
 
-/* ---------- PARSE DATE (รองรับ AppSheet) ---------- */
-function parseDate(cell){
-  if(!cell) return null;
-
-  /* 1) Date(2025,8,27) */
-  if(typeof cell.v === "string"){
-    const m = cell.v.match(/Date\((\d+),(\d+),(\d+)\)/);
-    if(m){
-      return {
-        day: parseInt(m[3],10),
-        month: parseInt(m[2],10) + 1, // 0–11 → 1–12
-        year: parseInt(m[1],10)       // ค.ศ. เท่านั้น
-      };
-    }
-  }
-
-  /* 2) 27/9/2568 */
-  if(typeof cell.f === "string"){
-    const p = cell.f.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if(p){
-      return {
-        day: parseInt(p[1],10),
-        month: parseInt(p[2],10),
-        year: parseInt(p[3],10) - 543 // พ.ศ. → ค.ศ.
-      };
-    }
-  }
-
-  return null;
-}
-
-/* ---------- BUILD DROPDOWN (9/2568) ---------- */
+/* ---------- BUILD DROPDOWN ---------- */
 function buildDropdown(){
   const set = new Set();
 
@@ -150,7 +156,7 @@ function buildDropdown(){
       const [m,y] = v.split("/").map(Number);
       const opt = document.createElement("option");
       opt.value = v;
-      opt.textContent = `${m}/${y+543}`; // แสดงเป็น พ.ศ.
+      opt.textContent = `${m}/${y+543}`; // แสดง พ.ศ.
       sel.appendChild(opt);
     });
 
@@ -160,20 +166,19 @@ function buildDropdown(){
 
 /* ---------- RENDER MAP ---------- */
 function render(selected){
-  const mapEl = document.getElementById("map");
-  mapEl.innerHTML = "";
+  const map = document.getElementById("map");
+  map.innerHTML = "";
 
   rows.forEach(r=>{
     const d = parseDate(r.c[DATE_COL]);
     if(!d) return;
-
     if(`${d.month}/${d.year}` !== selected) return;
 
     const xy = r.c[XY_COL]?.v;
     if(!xy || !xy.includes(",")) return;
 
     const [x,y] = xy.split(",").map(Number);
-    if(isNaN(x) || isNaN(y)) return;
+    if(isNaN(x)||isNaN(y)) return;
 
     const info =
 `วันที่ตรวจ: ${d.day}/${d.month}/${d.year+543}
@@ -183,12 +188,13 @@ function render(selected){
     const m = document.createElement("div");
     m.className = "marker";
     m.style.left = `${x}%`;
-    m.style.top = `${y}%`;
+    m.style.top  = `${y}%`;
     m.setAttribute("data-info", info);
-    mapEl.appendChild(m);
+    map.appendChild(m);
   });
 }
 </script>
 
 </body>
 </html>
+
