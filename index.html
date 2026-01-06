@@ -5,9 +5,9 @@
 <title>แผนผังถังดับเพลิง</title>
 
 <style>
-body { font-family:sans-serif; padding:20px }
-h2 { text-align:center }
-.filter { text-align:center; margin-bottom:10px }
+body{font-family:sans-serif;padding:20px}
+h2{text-align:center}
+.filter{text-align:center;margin-bottom:10px}
 
 .map-container{
   position:relative;
@@ -32,14 +32,14 @@ h2 { text-align:center }
 .marker:hover::after{
   content:attr(data-info);
   position:absolute;
-  top:-55px; left:50%;
+  top:-60px;left:50%;
   transform:translateX(-50%);
   background:#000c;
   color:#fff;
   padding:6px 8px;
   font-size:12px;
   border-radius:4px;
-  white-space:nowrap;
+  white-space:pre;
 }
 </style>
 </head>
@@ -56,46 +56,68 @@ h2 { text-align:center }
 <div class="map-container" id="map"></div>
 
 <script>
+/* ================= CONFIG ================= */
 const SHEET_ID="18YbWGcRIHhxv40v_7NTXQUNL3mV9jnNQrjfcUOvQEQs";
 const SHEET_NAME="Zone Office First Floor";
 
-const DATE_COL=1;     // B
-const INSPECTOR_COL=2;// C
-const NUMBER_COL=3;   // D
-const XY_COL=13;      // N
+const DATE_COL=1;      // B วันที่ตรวจถังดับเพลิง
+const INSPECTOR_COL=2; // C
+const NUMBER_COL=3;    // D
+const XY_COL=13;       // N ตำแหน่ง X,Y
 
 const TH_MONTHS=["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+/* ========================================= */
 
 const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}`;
 
 let rows=[];
 
+/* ---------- LOAD DATA ---------- */
 fetch(url)
 .then(r=>r.text())
 .then(t=>{
   const json=JSON.parse(t.substring(47).slice(0,-2));
   rows=json.table.rows;
   buildDropdown();
-});
+})
+.catch(e=>console.error(e));
 
+/* ---------- PARSE DATE STRING (D/M/2568) ---------- */
+function parseThaiDate(cell){
+  if(!cell || !cell.v) return null;
+
+  if(typeof cell.v === "string"){
+    const parts = cell.v.trim().split("/");
+    if(parts.length !== 3) return null;
+
+    const day = parseInt(parts[0],10);
+    const month = parseInt(parts[1],10) - 1; // 0–11
+    let year = parseInt(parts[2],10);
+
+    if(isNaN(day)||isNaN(month)||isNaN(year)) return null;
+
+    if(year > 2400) year -= 543; // พ.ศ. → ค.ศ.
+
+    return { day, month, year };
+  }
+
+  return null;
+}
+
+/* ---------- BUILD DROPDOWN ---------- */
 function buildDropdown(){
-  const map=new Map();
+  const map = new Map();
 
   rows.forEach(r=>{
-    const cell=r.c[DATE_COL];
-    if(!cell || !cell.v) return;
+    const d = parseThaiDate(r.c[DATE_COL]);
+    if(!d) return;
 
-    // 🔑 จุดสำคัญ: Google ส่ง Date object มา
-    if(cell.v instanceof Date){
-      const y=cell.v.getFullYear();
-      const m=cell.v.getMonth();
-      const key=`${y}-${m}`;
-      const label=`${TH_MONTHS[m]} ${y+543}`;
-      map.set(key,label);
-    }
+    const key = `${d.year}-${d.month}`;
+    const label = `${TH_MONTHS[d.month]} ${d.year+543}`;
+    map.set(key,label);
   });
 
-  const sel=document.getElementById("monthFilter");
+  const sel = document.getElementById("monthFilter");
   sel.innerHTML="";
 
   if(map.size===0){
@@ -116,16 +138,16 @@ function buildDropdown(){
   sel.onchange=()=>render(sel.value);
 }
 
-function render(key){
-  const map=document.getElementById("map");
-  map.innerHTML="";
+/* ---------- RENDER MAP ---------- */
+function render(selected){
+  const mapEl=document.getElementById("map");
+  mapEl.innerHTML="";
 
   rows.forEach(r=>{
-    const d=r.c[DATE_COL]?.v;
-    if(!(d instanceof Date)) return;
+    const d=parseThaiDate(r.c[DATE_COL]);
+    if(!d) return;
 
-    const k=`${d.getFullYear()}-${d.getMonth()}`;
-    if(k!==key) return;
+    if(`${d.year}-${d.month}`!==selected) return;
 
     const xy=r.c[XY_COL]?.v;
     if(!xy||!xy.includes(",")) return;
@@ -134,22 +156,20 @@ function render(key){
     if(isNaN(x)||isNaN(y)) return;
 
     const info=
-      `วันที่ตรวจ: ${d.toLocaleDateString("th-TH")} \n`+
-      `หมายเลขถัง: ${r.c[NUMBER_COL]?.v||""} \n`+
-      `ผู้ตรวจ: ${r.c[INSPECTOR_COL]?.v||""}`;
+`วันที่ตรวจ: ${d.day}/${d.month+1}/${d.year+543}
+หมายเลขถัง: ${r.c[NUMBER_COL]?.v||""}
+ผู้ตรวจ: ${r.c[INSPECTOR_COL]?.v||""}`;
 
     const m=document.createElement("div");
     m.className="marker";
     m.style.left=`${x}%`;
     m.style.top=`${y}%`;
     m.setAttribute("data-info",info);
-    map.appendChild(m);
+    mapEl.appendChild(m);
   });
 }
 </script>
 
 </body>
 </html>
-
-
 
