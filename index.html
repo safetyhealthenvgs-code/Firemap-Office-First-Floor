@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>แผนผังถังดับเพลิง</title>
+
   <style>
     body {
       font-family: sans-serif;
@@ -11,6 +12,11 @@
 
     h2 {
       text-align: center;
+    }
+
+    .filter {
+      text-align: center;
+      margin-bottom: 12px;
     }
 
     .map-container {
@@ -29,10 +35,7 @@
     .map-container::before {
       content: "";
       position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
+      inset: 0;
       background-image:
         linear-gradient(to right, rgba(0,0,0,0.05) 1px, transparent 1px),
         linear-gradient(to bottom, rgba(0,0,0,0.05) 1px, transparent 1px);
@@ -46,32 +49,36 @@
       height: 12px;
       background-color: red;
       border: 2px solid white;
-      box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
       border-radius: 50%;
       transform: translate(-50%, -50%);
       cursor: pointer;
+      box-shadow: 0 0 3px rgba(0,0,0,0.5);
     }
 
     .marker:hover::after {
       content: attr(data-info);
       position: absolute;
-      top: -45px;
+      top: -55px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(0, 0, 0, 0.8);
+      background: rgba(0,0,0,0.85);
       color: white;
-      padding: 4px 8px;
+      padding: 6px 8px;
       border-radius: 4px;
       font-size: 12px;
-      white-space: nowrap;
+      white-space: normal;
       z-index: 10;
+      min-width: 160px;
+      text-align: left;
     }
   </style>
 </head>
+
 <body>
+
   <h2>แผนผังถังดับเพลิง</h2>
 
-  <div style="text-align:center; margin-bottom:10px;">
+  <div class="filter">
     <label>เลือกเดือน: </label>
     <select id="monthFilter"></select>
   </div>
@@ -79,75 +86,94 @@
   <div class="map-container" id="map"></div>
 
   <script>
+    /* ================= CONFIG ================= */
     const SHEET_ID = "18YbWGcRIHhxv40v_7NTXQUNL3mV9jnNQrjfcUOvQEQs";
     const SHEET_NAME = "Zone Office First Floor";
-    const jsonUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}`;
+    const DATE_COL = 1; // คอลัมน์วันที่ (เริ่มนับจาก 0)
+    const INSPECTOR_COL = 2;
+    const NUMBER_COL = 3;
+    const XY_COL = 13;
+
+    const TH_MONTHS = [
+      "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.",
+      "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.",
+      "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."
+    ];
+    /* ========================================== */
+
+    const jsonUrl =
+      `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}`;
 
     let allRows = [];
 
     fetch(jsonUrl)
       .then(res => res.text())
       .then(text => {
-        const json = JSON.parse(text.substr(47).slice(0, -2));
+        const json = JSON.parse(text.substring(47).slice(0, -2));
         allRows = json.table.rows;
         buildMonthSelector();
-      });
+      })
+      .catch(err => console.error("โหลดข้อมูลไม่สำเร็จ", err));
 
     function buildMonthSelector() {
-      const monthSet = new Set();
+      const monthMap = new Map();
 
       allRows.forEach(row => {
-        const dateStr = row.c[1]?.f || row.c[1]?.v;
-        if (!dateStr) return;
+        const cell = row.c[DATE_COL];
+        if (!cell || !cell.v) return;
 
-        const d = new Date(dateStr);
+        const d = new Date(cell.v);
         if (isNaN(d)) return;
 
-        const ym = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-        monthSet.add(ym);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        const label = `${TH_MONTHS[d.getMonth()]} ${d.getFullYear() + 543}`;
+
+        monthMap.set(key, label);
       });
 
       const select = document.getElementById("monthFilter");
-      [...monthSet].sort().reverse().forEach(m => {
-        const opt = document.createElement("option");
-        opt.value = m;
-        opt.textContent = m;
-        select.appendChild(opt);
-      });
+      select.innerHTML = "";
+
+      [...monthMap.entries()]
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .forEach(([key, label]) => {
+          const opt = document.createElement("option");
+          opt.value = key;
+          opt.textContent = label;
+          select.appendChild(opt);
+        });
+
+      if (select.options.length > 0) {
+        renderMap(select.value);
+      }
 
       select.addEventListener("change", () => renderMap(select.value));
-
-      // แสดงเดือนล่าสุดอัตโนมัติ
-      if (select.value) renderMap(select.value);
     }
 
     function renderMap(selectedMonth) {
       const map = document.getElementById("map");
-      map.innerHTML = ""; // ล้าง marker เดิม
+      map.innerHTML = "";
 
-      allRows.forEach((row, i) => {
-        const dateStr = row.c[1]?.f || row.c[1]?.v;
-        const inspector = row.c[2]?.v || "";
-        const number = row.c[3]?.v || "";
-        const xyStr = row.c[13]?.v || "";
+      allRows.forEach(row => {
+        const dateCell = row.c[DATE_COL];
+        if (!dateCell || !dateCell.v) return;
 
-        if (!dateStr || !xyStr.includes(",")) return;
+        const d = new Date(dateCell.v);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        if (key !== selectedMonth) return;
 
-        const d = new Date(dateStr);
-        const ym = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-        if (ym !== selectedMonth) return;
+        const xyStr = row.c[XY_COL]?.v || "";
+        if (!xyStr.includes(",")) return;
 
         const [xStr, yStr] = xyStr.split(",");
         const x = parseFloat(xStr);
         const y = parseFloat(yStr);
-
-        if (isNaN(x) || isNaN(y)) return;
-        if (x < 0 || x > 100 || y < 0 || y > 100) return;
+        if (isNaN(x) || isNaN(y) || x < 0 || x > 100 || y < 0 || y > 100) return;
 
         const info = `
-          วันที่ตรวจ: ${dateStr}<br>
-          หมายเลขถัง: ${number}<br>
-          ผู้ตรวจ: ${inspector}
+          วันที่ตรวจ: ${d.toLocaleDateString("th-TH")}<br>
+          หมายเลขถัง: ${row.c[NUMBER_COL]?.v || ""}<br>
+          ผู้ตรวจ: ${row.c[INSPECTOR_COL]?.v || ""}
         `;
 
         const marker = document.createElement("div");
@@ -160,8 +186,11 @@
       });
     }
   </script>
+
 </body>
 </html>
+
+
 
 
 
