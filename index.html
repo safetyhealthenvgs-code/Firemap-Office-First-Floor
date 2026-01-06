@@ -16,7 +16,7 @@
 
     .filter {
       text-align: center;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
 
     .map-container {
@@ -26,8 +26,8 @@
       aspect-ratio: 873 / 600;
       background-image: url('https://github.com/safetyhealthenvgs-code/Firemap-Office-First-Floor/blob/main/Lay%20out%20Office%20fist%20Floor.jpg?raw=true');
       background-size: contain;
-      background-position: top left;
       background-repeat: no-repeat;
+      background-position: top left;
       border: 1px solid #ccc;
       margin: auto;
     }
@@ -58,7 +58,7 @@
     .marker:hover::after {
       content: attr(data-info);
       position: absolute;
-      top: -55px;
+      top: -60px;
       left: 50%;
       transform: translateX(-50%);
       background: rgba(0,0,0,0.85);
@@ -76,121 +76,146 @@
 
 <body>
 
-  <h2>แผนผังถังดับเพลิง</h2>
+<h2>แผนผังถังดับเพลิง</h2>
 
-  <div class="filter">
-    <label>เลือกเดือน: </label>
-    <select id="monthFilter"></select>
-  </div>
+<div class="filter">
+  <label>เลือกเดือน: </label>
+  <select id="monthFilter"></select>
+</div>
 
-  <div class="map-container" id="map"></div>
+<div class="map-container" id="map"></div>
 
-  <script>
-    /* ================= CONFIG ================= */
-    const SHEET_ID = "18YbWGcRIHhxv40v_7NTXQUNL3mV9jnNQrjfcUOvQEQs";
-    const SHEET_NAME = "Zone Office First Floor";
-    const DATE_COL = 1; // คอลัมน์วันที่ (เริ่มนับจาก 0)
-    const INSPECTOR_COL = 2;
-    const NUMBER_COL = 3;
-    const XY_COL = 13;
+<script>
+/* ================= CONFIG ================= */
+const SHEET_ID = "18YbWGcRIHhxv40v_7NTXQUNL3mV9jnNQrjfcUOvQEQs";
+const SHEET_NAME = "Zone Office First Floor";
 
-    const TH_MONTHS = [
-      "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.",
-      "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.",
-      "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."
-    ];
-    /* ========================================== */
+/* 🔴 สำคัญ: ปรับ index ให้ตรงกับ Google Sheet ของคุณ */
+const DATE_COL = 1;        // วันที่ตรวจ
+const INSPECTOR_COL = 2;   // ผู้ตรวจ
+const NUMBER_COL = 3;      // หมายเลขถัง
+const XY_COL = 13;         // พิกัด X,Y
 
-    const jsonUrl =
-      `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}`;
+const TH_MONTHS = [
+  "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.",
+  "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.",
+  "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."
+];
+/* ========================================= */
 
-    let allRows = [];
+const jsonUrl =
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}`;
 
-    fetch(jsonUrl)
-      .then(res => res.text())
-      .then(text => {
-        const json = JSON.parse(text.substring(47).slice(0, -2));
-        allRows = json.table.rows;
-        buildMonthSelector();
-      })
-      .catch(err => console.error("โหลดข้อมูลไม่สำเร็จ", err));
+let allRows = [];
 
-    function buildMonthSelector() {
-      const monthMap = new Map();
+/* ---------- โหลดข้อมูล ---------- */
+fetch(jsonUrl)
+  .then(res => res.text())
+  .then(text => {
+    const json = JSON.parse(text.substring(47).slice(0, -2));
+    allRows = json.table.rows;
+    buildMonthSelector();
+  })
+  .catch(err => console.error("โหลดข้อมูลไม่สำเร็จ", err));
 
-      allRows.forEach(row => {
-        const cell = row.c[DATE_COL];
-        if (!cell || !cell.v) return;
+/* ---------- ฟังก์ชัน parse วันที่ (ถึกสุด) ---------- */
+function parseSheetDate(cell) {
+  if (!cell || !cell.v) return null;
 
-        const d = new Date(cell.v);
-        if (isNaN(d)) return;
+  if (cell.v instanceof Date) {
+    return cell.v;
+  }
 
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-        const label = `${TH_MONTHS[d.getMonth()]} ${d.getFullYear() + 543}`;
-
-        monthMap.set(key, label);
-      });
-
-      const select = document.getElementById("monthFilter");
-      select.innerHTML = "";
-
-      [...monthMap.entries()]
-        .sort((a, b) => b[0].localeCompare(a[0]))
-        .forEach(([key, label]) => {
-          const opt = document.createElement("option");
-          opt.value = key;
-          opt.textContent = label;
-          select.appendChild(opt);
-        });
-
-      if (select.options.length > 0) {
-        renderMap(select.value);
-      }
-
-      select.addEventListener("change", () => renderMap(select.value));
+  if (typeof cell.v === "string") {
+    const parts = cell.v.split("/");
+    if (parts.length === 3) {
+      let d = parseInt(parts[0], 10);
+      let m = parseInt(parts[1], 10) - 1;
+      let y = parseInt(parts[2], 10);
+      if (y > 2400) y -= 543; // พ.ศ. → ค.ศ.
+      const date = new Date(y, m, d);
+      if (!isNaN(date)) return date;
     }
+  }
 
-    function renderMap(selectedMonth) {
-      const map = document.getElementById("map");
-      map.innerHTML = "";
+  return null;
+}
 
-      allRows.forEach(row => {
-        const dateCell = row.c[DATE_COL];
-        if (!dateCell || !dateCell.v) return;
+/* ---------- สร้าง Dropdown เดือน ---------- */
+function buildMonthSelector() {
+  const monthMap = new Map();
 
-        const d = new Date(dateCell.v);
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-        if (key !== selectedMonth) return;
+  allRows.forEach(row => {
+    const d = parseSheetDate(row.c[DATE_COL]);
+    if (!d) return;
 
-        const xyStr = row.c[XY_COL]?.v || "";
-        if (!xyStr.includes(",")) return;
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const label = `${TH_MONTHS[d.getMonth()]} ${d.getFullYear() + 543}`;
+    monthMap.set(key, label);
+  });
 
-        const [xStr, yStr] = xyStr.split(",");
-        const x = parseFloat(xStr);
-        const y = parseFloat(yStr);
-        if (isNaN(x) || isNaN(y) || x < 0 || x > 100 || y < 0 || y > 100) return;
+  const select = document.getElementById("monthFilter");
+  select.innerHTML = "";
 
-        const info = `
-          วันที่ตรวจ: ${d.toLocaleDateString("th-TH")}<br>
-          หมายเลขถัง: ${row.c[NUMBER_COL]?.v || ""}<br>
-          ผู้ตรวจ: ${row.c[INSPECTOR_COL]?.v || ""}
-        `;
+  if (monthMap.size === 0) {
+    const opt = document.createElement("option");
+    opt.textContent = "ไม่พบข้อมูลเดือน";
+    select.appendChild(opt);
+    console.warn("❌ ไม่พบข้อมูลวันที่จาก Google Sheet");
+    return;
+  }
 
-        const marker = document.createElement("div");
-        marker.className = "marker";
-        marker.style.left = `${x}%`;
-        marker.style.top = `${y}%`;
-        marker.setAttribute("data-info", info);
+  [...monthMap.entries()]
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .forEach(([key, label]) => {
+      const opt = document.createElement("option");
+      opt.value = key;
+      opt.textContent = label;
+      select.appendChild(opt);
+    });
 
-        map.appendChild(marker);
-      });
-    }
-  </script>
+  renderMap(select.value);
+  select.addEventListener("change", () => renderMap(select.value));
+}
+
+/* ---------- แสดง Marker ---------- */
+function renderMap(selectedMonth) {
+  const map = document.getElementById("map");
+  map.innerHTML = "";
+
+  allRows.forEach(row => {
+    const d = parseSheetDate(row.c[DATE_COL]);
+    if (!d) return;
+
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    if (key !== selectedMonth) return;
+
+    const xyStr = row.c[XY_COL]?.v || "";
+    if (!xyStr.includes(",")) return;
+
+    const [xStr, yStr] = xyStr.split(",");
+    const x = parseFloat(xStr);
+    const y = parseFloat(yStr);
+    if (isNaN(x) || isNaN(y) || x < 0 || x > 100 || y < 0 || y > 100) return;
+
+    const info = `
+      วันที่ตรวจ: ${d.toLocaleDateString("th-TH")}<br>
+      หมายเลขถัง: ${row.c[NUMBER_COL]?.v || ""}<br>
+      ผู้ตรวจ: ${row.c[INSPECTOR_COL]?.v || ""}
+    `;
+
+    const marker = document.createElement("div");
+    marker.className = "marker";
+    marker.style.left = `${x}%`;
+    marker.style.top = `${y}%`;
+    marker.setAttribute("data-info", info);
+
+    map.appendChild(marker);
+  });
+}
+</script>
 
 </body>
 </html>
-
-
-
 
 
