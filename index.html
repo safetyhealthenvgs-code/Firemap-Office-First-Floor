@@ -56,7 +56,7 @@ h2{text-align:center}
 <div class="map-container" id="map"></div>
 
 <script>
-/* =============== CONFIG =============== */
+/* ================= CONFIG ================= */
 const SHEET_ID="18YbWGcRIHhxv40v_7NTXQUNL3mV9jnNQrjfcUOvQEQs";
 const SHEET_NAME="Zone Office First Floor";
 
@@ -64,7 +64,7 @@ const DATE_COL=1;      // B วันที่ตรวจ
 const INSPECTOR_COL=2; // C
 const NUMBER_COL=3;    // D
 const XY_COL=13;       // N (x,y)
-/* ==================================== */
+/* ========================================= */
 
 const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}`;
 let rows=[];
@@ -77,47 +77,46 @@ fetch(url)
   rows=json.table.rows;
   buildDropdown();
 })
-.catch(e=>console.error(e));
+.catch(e=>console.error("โหลดข้อมูลล้มเหลว",e));
 
-/* ---------- PARSE DATE (27/9/2568) ---------- */
+/* ---------- PARSE DATE FROM cell.f OR cell.v ---------- */
 function parseThaiDate(cell){
-  if(!cell || !cell.v) return null;
+  if(!cell) return null;
 
-  if(typeof cell.v === "string"){
-    const p = cell.v.trim().split("/");
-    if(p.length!==3) return null;
+  const raw = cell.f || cell.v;
+  if(!raw || typeof raw !== "string") return null;
 
-    const day=parseInt(p[0],10);
-    const month=parseInt(p[1],10); // 1–12
-    const year=parseInt(p[2],10);  // 2568
+  // รองรับ 27/9/2568
+  const p = raw.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(!p) return null;
 
-    if(isNaN(day)||isNaN(month)||isNaN(year)) return null;
-    return {day,month,year};
-  }
-  return null;
+  return {
+    day: parseInt(p[1],10),
+    month: parseInt(p[2],10), // 1–12
+    year: parseInt(p[3],10)   // พ.ศ.
+  };
 }
 
 /* ---------- BUILD DROPDOWN (9/2568) ---------- */
 function buildDropdown(){
-  const map=new Map();
+  const set=new Set();
 
   rows.forEach(r=>{
     const d=parseThaiDate(r.c[DATE_COL]);
     if(!d) return;
-
-    const key=`${d.month}/${d.year}`; // ✅ ตรง Sheet
-    map.set(key,key);
+    set.add(`${d.month}/${d.year}`);
   });
 
   const sel=document.getElementById("monthFilter");
   sel.innerHTML="";
 
-  if(map.size===0){
+  if(set.size===0){
     sel.innerHTML="<option>ไม่พบข้อมูลเดือน</option>";
+    console.warn("❌ ไม่พบวันที่ที่ parse ได้จาก Google Sheet");
     return;
   }
 
-  [...map.keys()]
+  [...set]
     .sort((a,b)=>{
       const [ma,ya]=a.split("/").map(Number);
       const [mb,yb]=b.split("/").map(Number);
@@ -168,6 +167,4 @@ function render(selected){
 
 </body>
 </html>
-
-
 
